@@ -501,12 +501,281 @@ Map构造函数接受数组作为参数，实际上执行的是下面的算法�
 	map.clear()
 	map.size // 0
 
+#### 遍历方法
+
+`Map`原生提供三个遍历器生成函数和一个遍历方法。
+
+- keys()：返回键名的遍历器。
+- values()：返回键值的遍历器。
+- entries()：返回所有成员的遍历器。
+- forEach()：遍历Map的所有成员。
+
+下面是使用实例。
+
+	let map = new Map([
+	  ['F', 'no'],
+	  ['T',  'yes'],
+	]);
+	
+	for (let key of map.keys()) {
+	  console.log(key);
+	}
+	// "F"
+	// "T"
+	
+	for (let value of map.values()) {
+	  console.log(value);
+	}
+	// "no"
+	// "yes"
+	
+	for (let item of map.entries()) {
+	  console.log(item[0], item[1]);
+	}
+	// "F" "no"
+	// "T" "yes"
+	
+	// 或者
+	for (let [key, value] of map.entries()) {
+	  console.log(key, value);
+	}
+	
+	// 等同于使用map.entries()
+	for (let [key, value] of map) {
+	  console.log(key, value);
+	}
+
+上面代码最后的那个例子，表示Map结构的默认遍历器接口（`Symbol.iterator`属性），就是`entries`方法。
+	
+	map[Symbol.iterator] === map.entries
+	// true
+
+`Map`结构转为数组结构，比较快速的方法是结合使用扩展运算符（`...`）。
+
+	let map = new Map([
+	  [1, 'one'],
+	  [2, 'two'],
+	  [3, 'three'],
+	]);
+	
+	[...map.keys()]
+	// [1, 2, 3]
+	
+	[...map.values()]
+	// ['one', 'two', 'three']
+	
+	[...map.entries()]
+	// [[1,'one'], [2, 'two'], [3, 'three']]
+	
+	[...map]
+	// [[1,'one'], [2, 'two'], [3, 'three']]
+
+结合数组的`map`方法、`filter`方法，可以实现Map的遍历和过滤（Map本身没有`map`和`filter`方法）。
+
+	let map0 = new Map()
+	  .set(1, 'a')
+	  .set(2, 'b')
+	  .set(3, 'c');
+	
+	let map1 = new Map(
+	  [...map0].filter(([k, v]) => k < 3)
+	);
+	// 产生Map结构 {1 => 'a', 2 => 'b'}
+	
+	let map2 = new Map(
+	  [...map0].map(([k, v]) => [k * 2, '_' + v])
+	    );
+	// 产生Map结构 {2 => '_a', 4 => '_b', 6 => '_c'}
+
+此外，Map还有一个`forEach`方法，与数组的`forEach`方法类似，也可以实现遍历。
+
+	map.forEach(function(value, key, map)) {
+	  console.log("Key: %s, Value: %s", key, value);
+	};
+
+`forEach`方法还可以接受第二个参数，用来绑定this。
+
+	var reporter = {
+	  report: function(key, value) {
+	    console.log("Key: %s, Value: %s", key, value);
+	  }
+	};
+	
+	map.forEach(function(value, key, map) {
+	  this.report(key, value);
+	}, reporter);
+
+上面代码中，`forEach`方法的回调函数的this，就指向`reporter`。
+
+#### 与其他数据结构的互相转换
+
+##### （1）Map转为数组
+
+前面已经提过，Map转为数组最方便的方法，就是使用扩展运算符（...）。
+
+	let myMap = new Map().set(true, 7).set({foo: 3}, ['abc']);
+	[...myMap]
+	// [ [ true, 7 ], [ { foo: 3 }, [ 'abc' ] ] ]
+
+##### （2）数组转为Map
+
+将数组转入Map构造函数，就可以转为Map。
+	
+	new Map([[true, 7], [{foo: 3}, ['abc']]])
+	// Map {true => 7, Object {foo: 3} => ['abc']}
+
+##### （3）Map转为对象
+
+如果所有Map的键都是字符串，它可以转为对象。
+
+	function strMapToObj(strMap) {
+	  let obj = Object.create(null);
+	  for (let [k,v] of strMap) {
+	    obj[k] = v;
+	  }
+	  return obj;
+	}
+	
+	let myMap = new Map().set('yes', true).set('no', false);
+	strMapToObj(myMap)
+	// { yes: true, no: false }
+
+##### （4）对象转为Map
+
+	function objToStrMap(obj) {
+	  let strMap = new Map();
+	  for (let k of Object.keys(obj)) {
+	    strMap.set(k, obj[k]);
+	  }
+	  return strMap;
+	}
+	
+	objToStrMap({yes: true, no: false})
+	// [ [ 'yes', true ], [ 'no', false ] ]
+
+##### （5）Map转为JSON
+
+Map转为JSON要区分两种情况。一种情况是，Map的键名都是字符串，这时可以选择转为对象JSON。
+
+	function strMapToJson(strMap) {
+	  return JSON.stringify(strMapToObj(strMap));
+	}
+	
+	let myMap = new Map().set('yes', true).set('no', false);
+	strMapToJson(myMap)
+	// '{"yes":true,"no":false}'
+
+另一种情况是，Map的键名有非字符串，这时可以选择转为数组JSON。
+	
+	function mapToArrayJson(map) {
+	  return JSON.stringify([...map]);
+	}
+	
+	let myMap = new Map().set(true, 7).set({foo: 3}, ['abc']);
+	mapToArrayJson(myMap)
+	// '[[true,7],[{"foo":3},["abc"]]]'
+
+##### （6）JSON转为Map
+
+JSON转为Map，正常情况下，所有键名都是字符串。
+
+	function jsonToStrMap(jsonStr) {
+	  return objToStrMap(JSON.parse(jsonStr));
+	}
+	
+	jsonToStrMap('{"yes":true,"no":false}')
+	// Map {'yes' => true, 'no' => false}
+
+但是，有一种特殊情况，整个JSON就是一个数组，且每个数组成员本身，又是一个有两个成员的数组。这时，它可以一一对应地转为Map。这往往是数组转为JSON的逆操作。
+
+	function jsonToMap(jsonStr) {
+	  return new Map(JSON.parse(jsonStr));
+	}
+	
+	jsonToMap('[[true,7],[{"foo":3},["abc"]]]')
+	// Map {true => 7, Object {foo: 3} => ['abc']}
+
 ### 4、WeakMap
 
+`WeakMap`结构与Map结构基本类似，唯一的区别是它只接受对象作为键名（null除外），不接受其他类型的值作为键名，而且键名所指向的对象，不计入垃圾回收机制。
+	
+	var map = new WeakMap()
+	map.set(1, 2)
+	// TypeError: 1 is not an object!
+	map.set(Symbol(), 2)
+	// TypeError: Invalid value used as weak map key
 
+上面代码中，如果将1和Symbol作为`WeakMap`的键名，都会报错。
 
+`WeakMap`的设计目的在于，键名是对象的弱引用（垃圾回收机制不将该引用考虑在内），所以其所对应的对象可能会被自动回收。当对象被回收后，WeakMap自动移除对应的键值对。典型应用是，一个对应DOM元素的WeakMap结构，当某个DOM元素被清除，其所对应的WeakMap记录就会自动被移除。基本上，WeakMap的专用场合就是，它的键所对应的对象，可能会在将来消失。WeakMap结构有助于防止内存泄漏。
 
+下面是`WeakMap`结构的一个例子，可以看到用法上与Map几乎一样。
 
+	var wm = new WeakMap();
+	var element = document.querySelector(".element");
+	
+	wm.set(element, "Original");
+	wm.get(element) // "Original"
+	
+	element.parentNode.removeChild(element);
+	element = null;
+	wm.get(element) // undefined
+
+上面代码中，变量wm是一个WeakMap实例，我们将一个DOM节点element作为键名，然后销毁这个节点，element对应的键就自动消失了，再引用这个键名就返回undefined。
+
+WeakMap与Map在API上的区别主要是两个，一是没有遍历操作（即没有key()、values()和entries()方法），也没有size属性；二是无法清空，即不支持clear方法。这与WeakMap的键不被计入引用、被垃圾回收机制忽略有关。因此，WeakMap只有四个方法可用：`get()`、`set()`、`has()`、`delete()`。
+
+	var wm = new WeakMap();
+	
+	wm.size
+	// undefined
+	
+	wm.forEach
+	// undefined
+
+前文说过，`WeakMap`应用的典型场合就是DOM节点作为键名。下面是一个例子。
+
+	let myElement = document.getElementById('logo');
+	let myWeakmap = new WeakMap();
+	
+	myWeakmap.set(myElement, {timesClicked: 0});
+	
+	myElement.addEventListener('click', function() {
+	  let logoData = myWeakmap.get(myElement);
+	  logoData.timesClicked++;
+	  myWeakmap.set(myElement, logoData);
+	}, false);
+
+上面代码中，`myElement`是一个DOM节点，每当发生click事件，就更新一下状态。我们将这个状态作为键值放在WeakMap里，对应的键名就是myElement。一旦这个DOM节点删除，该状态就会自动消失，不存在内存泄漏风险。
+
+`WeakMap`的另一个用处是部署私有属性。
+
+	let _counter = new WeakMap();
+	let _action = new WeakMap();
+	
+	class Countdown {
+	  constructor(counter, action) {
+	    _counter.set(this, counter);
+	    _action.set(this, action);
+	  }
+	  dec() {
+	    let counter = _counter.get(this);
+	    if (counter < 1) return;
+	    counter--;
+	    _counter.set(this, counter);
+	    if (counter === 0) {
+	      _action.get(this)();
+	    }
+	  }
+	}
+	
+	let c = new Countdown(2, () => console.log('DONE'));
+	
+	c.dec()
+	c.dec()
+	// DONE
+
+上面代码中，`Countdown`类的两个内部属性`_counter`和`_action`，是实例的弱引用，所以如果删除实例，它们也就随之消失，不会造成内存泄漏。
 
 
 
