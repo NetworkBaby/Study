@@ -538,39 +538,402 @@ ES5的继承，实质是先创造子类的实例对象this，然后再将父类�
 	
 ### 3、原生构造函数的继承
 
+原生构造函数是指语言内置的构造函数，通常用来生成数据结构。ECMAScript的原生构造函数大致有下面这些。
 
+- Boolean()
+- Number()
+- String()
+- Array()
+- Date()
+- Function()
+- RegExp()
+- Error()
+- Object()
+
+以前，这些原生构造函数是无法继承的，比如，不能自己定义一个Array的子类。
+
+	function MyArray() {
+	  Array.apply(this, arguments);
+	}
+	
+	MyArray.prototype = Object.create(Array.prototype, {
+	  constructor: {
+	    value: MyArray,
+	    writable: true,
+	    configurable: true,
+	    enumerable: true
+	  }
+	});
+	
+上面代码定义了一个继承Array的MyArray类。但是，这个类的行为与Array完全不一致。
+
+	var colors = new MyArray();
+	colors[0] = "red";
+	colors.length  // 0
+	
+	colors.length = 0;
+	colors[0]  // "red"
+	
+之所以会发生这种情况，是因为子类无法获得原生构造函数的内部属性，通过`Array.apply()`或者分配给原型对象都不行。ES5是先新建子类的实例对象this，再将父类的属性添加到子类上，由于父类的内部属性无法获取，导致无法继承原生的构造函数。比如，Array构造函数有一个内部属性`[[DefineOwnProperty]]`，用来定义新属性时，更新length属性，这个内部属性无法在子类获取，导致子类的length属性行为不正常。
+
+ES6允许继承原生构造函数定义子类，因为ES6是先新建父类的实例对象this，然后再用子类的构造函数修饰this，使得父类的所有行为都可以继承。下面是一个继承Array的例子。
+
+	class MyArray extends Array {
+	  constructor(...args) {
+	    super(...args);
+	  }
+	}
+	
+	var arr = new MyArray();
+	arr[0] = 12;
+	arr.length // 1
+	
+	arr.length = 0;
+	arr[0] // undefined
+
+上面代码定义了一个`MyArray`类，继承了Array构造函数，因此就可以从`MyArray`生成数组的实例。这意味着，ES6可以自定义原生数据结构（比如Array、String等）的子类，这是ES5无法做到的。
+
+上面这个例子也说明，extends关键字不仅可以用来继承类，还可以用来继承原生的构造函数。因此可以在原生数据结构的基础上，定义自己的数据结构。下面就是定义了一个带版本功能的数组。
+
+	class VersionedArray extends Array {
+	  constructor() {
+	    super();
+	    this.history = [[]];
+	  }
+	  commit() {
+	    this.history.push(this.slice());
+	  }
+	  revert() {
+	    this.splice(0, this.length, ...this.history[this.history.length - 1]);
+	  }
+	}
+	
+	var x = new VersionedArray();
+	
+	x.push(1);
+	x.push(2);
+	x // [1, 2]
+	x.history // [[]]
+	
+	x.commit();
+	x.history // [[], [1, 2]]
+	x.push(3);
+	x // [1, 2, 3]
+	
+	x.revert();
+	x // [1, 2]
+
+上面代码中，`VersionedArray`结构会通过`commit`方法，将自己的当前状态存入history属性，然后通过revert方法，可以撤销当前版本，回到上一个版本。除此之外，`VersionedArray`依然是一个数组，所有原生的数组方法都可以在它上面调用。
+
+下面是一个自定义Error子类的例子。
+	
+	class ExtendableError extends Error {
+	  constructor(message) {
+	    super();
+	    this.message = message;
+	    this.stack = (new Error()).stack;
+	    this.name = this.constructor.name;
+	  }
+	}
+	
+	class MyError extends ExtendableError {
+	  constructor(m) {
+	    super(m);
+	  }
+	}
+	
+	var myerror = new MyError('ll');
+	myerror.message // "ll"
+	myerror instanceof Error // true
+	myerror.name // "MyError"
+	myerror.stack
+	// Error
+	//     at MyError.ExtendableError
+	//     ...
 
 ### 4、Class的取值函数（getter）和存值函数（setter）
 
+与ES5一样，在Class内部可以使用get和set关键字，对某个属性设置存值函数和取值函数，拦截该属性的存取行为。
 
+	class MyClass {
+	  constructor() {
+	    // ...
+	  }
+	  get prop() {
+	    return 'getter';
+	  }
+	  set prop(value) {
+	    console.log('setter: '+value);
+	  }
+	}
+	
+	let inst = new MyClass();
+	
+	inst.prop = 123;
+	// setter: 123
+	
+	inst.prop
+	// 'getter'
+
+上面代码中，prop属性有对应的存值函数和取值函数，因此赋值和读取行为都被自定义了。
+
+存值函数和取值函数是设置在属性的`descriptor`对象上的。
+	
+	class CustomHTMLElement {
+	  constructor(element) {
+	    this.element = element;
+	  }
+	
+	  get html() {
+	    return this.element.innerHTML;
+	  }
+	
+	  set html(value) {
+	    this.element.innerHTML = value;
+	  }
+	}
+	
+	var descriptor = Object.getOwnPropertyDescriptor(
+	  CustomHTMLElement.prototype, "html");
+	"get" in descriptor  // true
+	"set" in descriptor  // true
+
+上面代码中，存值函数和取值函数是定义在html属性的描述对象上面，这与ES5完全一致。
 
 ### 5、Class的Generator方法
 
+如果某个方法之前加上星号（*），就表示该方法是一个Generator函数。
 
+	class Foo {
+	  constructor(...args) {
+	    this.args = args;
+	  }
+	  * [Symbol.iterator]() {
+	    for (let arg of this.args) {
+	      yield arg;
+	    }
+	  }
+	}
+	
+	for (let x of new Foo('hello', 'world')) {
+	  console.log(x);
+	}
+	// hello
+	// world
+
+上面代码中，Foo类的`Symbol.iterator`方法前有一个星号，表示该方法是一个`Generator`函数。`Symbol.iterator`方法返回一个Foo类的默认遍历器，`for...of`循环会自动调用这个遍历器。
 
 ### 6、Class的静态方法
 
+类相当于实例的原型，所有在类中定义的方法，都会被实例继承。如果在一个方法前，加上`static`关键字，就表示该方法不会被实例继承，而是直接通过类来调用，这就称为“静态方法”。
 
+	class Foo {
+	  static classMethod() {
+	    return 'hello';
+	  }
+	}
+	
+	Foo.classMethod() // 'hello'
+	
+	var foo = new Foo();
+	foo.classMethod()
+	// TypeError: undefined is not a function
+
+上面代码中，Foo类的classMethod方法前有`static`关键字，表明该方法是一个静态方法，可以直接在Foo类上调用（`Foo.classMethod()`），而不是在Foo类的实例上调用。如果在实例上调用静态方法，会抛出一个错误，表示不存在该方法。
+
+父类的静态方法，可以被子类继承。
+
+	class Foo {
+	  static classMethod() {
+	    return 'hello';
+	  }
+	}
+	
+	class Bar extends Foo {
+	}
+	
+	Bar.classMethod(); // 'hello'
+
+上面代码中，父类Foo有一个静态方法，子类Bar可以调用这个方法。
+
+静态方法也是可以从`super`对象上调用的。
+	
+	class Foo {
+	  static classMethod() {
+	    return 'hello';
+	  }
+	}
+	
+	class Bar extends Foo {
+	  static classMethod() {
+	    return super.classMethod() + ', too';
+	  }
+	}
+	
+	Bar.classMethod();
 
 ### 7、Class的静态属性
 
+静态属性指的是Class本身的属性，即`Class.propname`，而不是定义在实例对象（this）上的属性。
+	
+	class Foo {
+	}
+	
+	Foo.prop = 1;
+	Foo.prop // 1
 
+上面的写法可以读写Foo类的静态属性`prop`。
+
+目前，只有这种写法可行，因为ES6明确规定，Class内部只有静态方法，没有静态属性。
+
+	// 以下两种写法都无效，
+	// 但不会报错
+	class Foo {
+	  // 写法一
+	  prop: 2
+	
+	  // 写法二
+	  static prop: 2
+	}
+	
+	Foo.prop // undefined
+
+ES7有一个静态属性的提案，目前Babel转码器支持。
+
+这个提案对实例属性和静态属性，都规定了新的写法。
+	
+	// 实例属性的新写法
+	class MyClass {
+	  myProp = 42;
+	
+	  constructor() {
+	    console.log(this.myProp); // 42
+	  }
+	}
+	
+	// 静态属性的新写法
+	class MyClass {
+	  static myStaticProp = 42;
+	
+	  constructor() {
+	    console.log(MyClass.myProp); // 42
+	  }
+	}
 
 ### 8、new.target属性
 
+new是从构造函数生成实例的命令。ES6为new命令引入了一个`new.target`属性，（在构造函数中）返回new命令作用于的那个构造函数。如果构造函数不是通过new命令调用的，`new.target`会返回undefined，因此这个属性可以用来确定构造函数是怎么调用的。
 
+	function Person(name) {
+	  if (new.target !== undefined) {
+	    this.name = name;
+	  } else {
+	    throw new Error('必须使用new生成实例');
+	  }
+	}
+	
+	// 另一种写法
+	function Person(name) {
+	  if (new.target === Person) {
+	    this.name = name;
+	  } else {
+	    throw new Error('必须使用new生成实例');
+	  }
+	}
+	
+	var person = new Person('张三'); // 正确
+	var notAPerson = Person.call(person, '张三');  // 报错
+
+上面代码确保构造函数只能通过new命令调用。
+
+Class内部调用`new.target`，返回当前Class。
+
+	class Rectangle {
+	  constructor(length, width) {
+	    console.log(new.target === Rectangle);
+	    this.length = length;
+	    this.width = width;
+	  }
+	}
+	
+	var obj = new Rectangle(3, 4); // 输出 true
+
+需要注意的是，子类继承父类时，`new.target`会返回子类。
+	
+	class Rectangle {
+	  constructor(length, width) {
+	    console.log(new.target === Rectangle);
+	    // ...
+	  }
+	}
+	
+	class Square extends Rectangle {
+	  constructor(length) {
+	    super(length, length);
+	  }
+	}
+	
+	var obj = new Square(3); // 输出 false
+
+上面代码中，`new.target`会返回子类。
+
+利用这个特点，可以写出不能独立使用、必须继承后才能使用的类。
+
+	class Shape {
+	  constructor() {
+	    if (new.target === Shape) {
+	      throw new Error('本类不能实例化');
+	    }
+	  }
+	}
+	
+	class Rectangle extends Shape {
+	  constructor(length, width) {
+	    super();
+	    // ...
+	  }
+	}
+	
+	var x = new Shape();  // 报错
+	var y = new Rectangle(3, 4);  // 正确
+
+上面代码中，Shape类不能被实例化，只能用于继承。
+
+注意，在函数外部，使用`new.target`会报错。
 
 ### 9、Mixin模式的实现
 
+`Mixin`模式指的是，将多个类的接口“混入”（mix in）另一个类。它在ES6的实现如下。
 
+	function mix(...mixins) {
+	  class Mix {}
+	
+	  for (let mixin of mixins) {
+	    copyProperties(Mix, mixin);
+	    copyProperties(Mix.prototype, mixin.prototype);
+	  }
+	
+	  return Mix;
+	}
+	
+	function copyProperties(target, source) {
+	  for (let key of Reflect.ownKeys(source)) {
+	    if ( key !== "constructor"
+	      && key !== "prototype"
+	      && key !== "name"
+	    ) {
+	      let desc = Object.getOwnPropertyDescriptor(source, key);
+	      Object.defineProperty(target, key, desc);
+	    }
+	  }
+	}
 
+上面代码的mix函数，可以将多个对象合成为一个类。使用的时候，只要继承这个类即可。
 
-
-
-
-
-
-
+	class DistributedEdit extends mix(Loggable, Serializable) {
+	  // ...
+	}
+	
 
 
 
